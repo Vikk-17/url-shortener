@@ -26,7 +26,7 @@ pub async fn data_shorten(data: web::Data<AppState>, user_input: web::Json<UserL
         r#"
         INSERT INTO urls (longurl)
         VALUES ($1)
-        RETURNING id, longurl, slug
+        RETURNING id, longurl
         "#,
     )
     .bind(&input.longurl)
@@ -35,16 +35,36 @@ pub async fn data_shorten(data: web::Data<AppState>, user_input: web::Json<UserL
 
     match row {
         Ok(r) => {
-            let output = DbOutput {
-                id: r.get("id"),
-                longurl: r.get("longurl"),
-                slug: r.get("slug"),
-            };
-            Ok(HttpResponse::Ok().json(json!({
-                "message": "Data inserted",
-                "output": output})))
-        },
+            let id = r.get("id");
+            let slug = base62::encode(id as u128);
+            let longurl= r.get("longurl");
 
+            let updated = sqlx::query(
+                r#"
+                UPDATE urls SET slug = $1 WHERE id = $2 RETURNING slug
+                "#,
+            )
+            .bind(&slug)
+            .bind(id)
+            .execute(&data.db)
+            .await;
+
+            match updated {
+                Ok(_) => {
+                    let output = DbOutput { id, slug, longurl };
+                    Ok(HttpResponse::Ok().json(json!({
+                        "message": "Data inserted",
+                        "output": output
+                    })))
+                }
+                Err(e) => {
+                    eprintln!("Update error: {e}");
+                    Ok(HttpResponse::InternalServerError().json(json!({
+                        "error": format!("Db update error: {e}"),
+                })))
+                }
+            }
+        }
         Err(e) => {
             eprintln!("Db insertion error {e}");
             Ok(HttpResponse::InternalServerError()
