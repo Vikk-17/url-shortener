@@ -10,6 +10,8 @@ Let's assume,
 - The service will run for 10 years: `100 millions * 365 * 10 = 365 billions (approx)` record must support
 - Total storage require: `365 billions * 100 bytes` if each url is `100 bytes` long
 
-
 ---
 
+### Architecture
+
+![DB Support](./assets/shortner_fc.png)
