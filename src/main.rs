@@ -17,7 +17,6 @@ use sqlx::{
     Postgres,
     postgres::PgPoolOptions,
 };
-// use anyhow::{Result, Error};
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
