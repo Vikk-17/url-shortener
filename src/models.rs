@@ -2,5 +2,6 @@ use serde::{Serialize, Deserialize};
 
 #[derive(Serialize, Deserialize)]
 pub struct UserLongUrl {
-    pub url: String,
+    pub longurl: String,
 }
+
