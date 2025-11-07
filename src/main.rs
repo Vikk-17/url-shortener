@@ -36,7 +36,7 @@ async fn main() -> std::io::Result<()> {
             .wrap(Logger::default())
             .wrap(Logger::new("%a %{User-Agent}i"))
             .app_data(web::Data::new(AppState { db: pool.clone() }))
-            .service(index)
+            .service(redirection)
             .service(data_shorten)
     })
     .bind(("127.0.0.1", 8080))?

@@ -1,19 +1,41 @@
 use crate::AppState;
 use crate::models::*;
-use actix_web::{Error, HttpResponse, Responder, Result, get, post, web};
+use actix_web::{Error, HttpResponse, Result, get, http::header::LOCATION, post, web};
 use serde_json::json;
 use sqlx::Row; // <- only required to call get function
 
-#[get("/")]
-pub async fn index() -> impl Responder {
-    HttpResponse::Ok().body("ALl good")
+/// GET /api/v1/shorturl
+/// Return longurl for HTTP Redirection
+#[get("/api/v1/{slug}")]
+pub async fn redirection(
+    state: web::Data<AppState>,
+    path: web::Path<String>,
+) -> Result<HttpResponse, Error> {
+    let slug = path.into_inner();
+
+    // check if the slug is existing
+    let existing = sqlx::query(r#"SELECT longurl FROM urls WHERE slug = $1"#)
+        .bind(&slug)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(actix_web::error::ErrorInternalServerError)?;
+
+    let Some(row) = existing else {
+        return Ok(HttpResponse::NotFound().finish());
+    };
+
+    let longurl = row.get::<String, _>("longurl");
+
+    Ok(HttpResponse::Found()
+        .insert_header((LOCATION, longurl))
+        .finish())
 }
 
 /// POST /api/v1/data/shorten
-/// BODY JSON: {"url": "..."}
+/// BODY JSON: {"longurl": "..."}
 #[post("/api/v1/data/shorten")]
 pub async fn data_shorten(
-    data: web::Data<AppState>,
+    state: web::Data<AppState>,
     user_input: web::Json<UserLongUrl>,
 ) -> Result<HttpResponse, Error> {
     let longurl = user_input.into_inner().longurl;
@@ -26,7 +48,7 @@ pub async fn data_shorten(
         "#,
     )
     .bind(&longurl)
-    .fetch_optional(&data.db)
+    .fetch_optional(&state.db)
     .await
     .map_err(actix_web::error::ErrorInternalServerError)?;
 
@@ -41,7 +63,7 @@ pub async fn data_shorten(
         )
         .bind(&slug)
         .bind(id)
-        .fetch_optional(&data.db)
+        .fetch_optional(&state.db)
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
 
@@ -57,7 +79,7 @@ pub async fn data_shorten(
     // Existing longurl — just fetch id + slug
     let existing = sqlx::query(r#"SELECT id, slug FROM urls WHERE longurl = $1"#)
         .bind(&longurl)
-        .fetch_one(&data.db)
+        .fetch_one(&state.db)
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
 
