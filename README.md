@@ -44,9 +44,11 @@ Let's assume,
 
 - **Add S3 log export endpoint in case of AWS integration**
 
-- **CI/CD Pipelining**
+- [x] CI/CD Pipelining
+    - [ ] Need to add docker secrets in the github
 
 - **Dockerfile & docker-compose**
+    - [x] Dockerfile - tested 
     - [ ] API container
     - [ ] Postgres
     - [ ] Redis
