@@ -8,9 +8,24 @@ use redis::AsyncCommands;
 use serde_json::json;
 use sqlx::Row; // <- only required to call get function
 use std::time::Instant;
+use utoipa;
 
 /// GET /api/v1/shorturl
 /// Return longurl for HTTP Redirection
+#[utoipa::path(
+    get,
+    path = "/api/v1/{slug}",
+    responses(
+        (status= 302, description = "Redirect to long URL", headers(
+            ("Location" = String, description = "The original long URL")
+        )),
+        (status = 404, description = "URL not found", body = ErrorResponse)
+    ),
+    params(
+        ("slug" = String, Path, description = "Short URL slug", example="abd2A"),
+    ),
+    tag = "urls"
+)]
 #[get("/api/v1/{slug}")]
 pub async fn redirection(
     state: web::Data<AppState>,
@@ -88,6 +103,16 @@ pub async fn redirection(
 
 /// POST /api/v1/data/shorten
 /// BODY JSON: {"longurl": "..."}
+#[utoipa::path(
+    post,
+    path = "/api/v1/data/shorten",
+    request_body(content = UserLongUrl, description = "Long URL to shorten", content_type = "aplication/json"),
+    responses(
+        (status = 200, description = "URL shortened successfully", body = ShortenResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse),
+    ),
+    tag = "urls"
+)]
 #[post("/api/v1/data/shorten")]
 pub async fn data_shorten(
     state: web::Data<AppState>,

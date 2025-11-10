@@ -10,11 +10,52 @@ use dotenvy::dotenv;
 use env_logger::Env;
 use handlers::*;
 use sqlx::{Pool, Postgres, postgres::PgPoolOptions};
+use utoipa::OpenApi;
+use utoipa_swagger_ui::SwaggerUi;
+
+#[derive(OpenApi)]
+#[openapi(
+    paths(
+        handlers::redirection,
+        handlers::data_shorten,
+    ),
+    components(
+        schemas(
+            models::UserLongUrl,
+            models::DbOutput,
+            models::ShortenResponse,
+            models::ErrorResponse,
+        )
+    ),
+    tags(
+        (name = "urls", description = "URL shortening and redirection endpoints")
+    ),
+    info(
+        title = "URL Shortener API",
+        version = "1.0.0",
+        description = "A high-performance URL shortener with Redis caching and Prometheus metrics",
+        contact(
+            name = "API Support",
+            email = "support@example.com"
+        ),
+        license(
+            name = "MIT",
+            url = "https://opensource.org/licenses/MIT"
+        )
+    ),
+    servers(
+        (url = "http://localhost:8080", description = "Local development server"),
+        (url = "https://api.example.com", description = "Production server")
+    )
+)]
+struct ApiDoc;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     env_logger::init_from_env(Env::default().default_filter_or("info"));
     dotenv().ok();
+
+    let  openapi = ApiDoc::openapi();
 
     // DB pool creation -> sqlx
     let db_uri: String = std::env::var("DATABASE_URL").expect("Invalid database uri");
@@ -66,6 +107,10 @@ async fn main() -> std::io::Result<()> {
             .service(data_shorten)
             .service(prom)
             .service(metrics)
+            .service(
+                SwaggerUi::new("/swagger-ui/{_:.*}")
+                    .url("/api-docs/openapi.json", openapi.clone())
+            )
     })
     .bind(("0.0.0.0", 8080))?
     .workers(2)
