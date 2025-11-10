@@ -1,7 +1,7 @@
 mod handlers;
+mod metrics;
 mod models;
 mod state;
-mod metrics;
 
 use crate::state::*;
 use actix_web::{App, HttpServer, middleware::Logger, web};

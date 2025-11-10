@@ -1,9 +1,9 @@
 use crate::AppState;
-use crate::models::*;
 use crate::metrics::*;
+use crate::models::*;
 use actix_web::Responder;
 use actix_web::{Error, HttpResponse, Result, get, http::header::LOCATION, post, web};
-use prometheus::{Registry, TextEncoder, Encoder};
+use prometheus::{Encoder, TextEncoder};
 use redis::AsyncCommands;
 use serde_json::json;
 use sqlx::Row; // <- only required to call get function
@@ -172,7 +172,6 @@ pub async fn data_shorten(
 
 #[get("/prom")]
 pub async fn prom() -> impl Responder {
-
     HTTP_REQUEST_TOTAL
         .with_label_values(&["GET", "/prom", "200"])
         .inc();
@@ -188,11 +187,11 @@ pub async fn metrics() -> Result<HttpResponse, Error> {
     let mut buffer = vec![];
     let metric_families = prometheus::gather();
 
-    encoder.encode(&metric_families, &mut buffer)
+    encoder
+        .encode(&metric_families, &mut buffer)
         .map_err(actix_web::error::ErrorInternalServerError)?;
 
     Ok(HttpResponse::Ok()
         .content_type("text/plain; version=0.0.4")
-        .body(buffer)
-    )
+        .body(buffer))
 }

@@ -1,7 +1,6 @@
 use lazy_static::lazy_static;
 use prometheus::{IntCounterVec, register_int_counter_vec};
 
-
 lazy_static! {
     pub static ref HTTP_REQUEST_TOTAL: IntCounterVec = register_int_counter_vec!(
         "http_requests_total",
