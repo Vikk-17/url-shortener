@@ -14,7 +14,7 @@ Let's assume,
 
 ### Architecture
 
-![DB Support](./assets/shortner_fc.excalidraw.png)
+![DB Support](./assets/images/shortner_fc.excalidraw.png)
 
 ---
 
@@ -24,33 +24,18 @@ Let's assume,
     - [x] Cache slug -> longurl
     - [x] Cache expiry (e.g., 24 hours)
 
-- **Add stats endpoint**
-    - [ ] GET /api/v1/stats/{slug}
-    - [ ] Return:
-        - created_at
-        - click count
-        - last_accessed
-        - longurl
-
 - **Redis (For rate limiting)**
     - [ ] Prevent spam on /shorten endpoint.
     - [ ] Or write basic Middleware for rate limiting
-    - [ ] Check for aws options too for DDOS and rate limiting
-
-- **Add logging or click tracking**
-    - For click tracking use 302 redirecting
-
-- **Add S3 log export endpoint in case of AWS integration**
 
 - [x] CI/CD Pipelining
-    - [x] Need to add docker secrets in the github
 
 - **Dockerfile & docker-compose**
     - [x] Dockerfile - tested
-    - [ ] API container
-    - [ ] Postgres
-    - [ ] Redis
-    - [ ] LocalStack (S3) if needed
+    - [x] Postgres
+    - [x] Redis
+    - [x] Prometheus
+    - [ ] Grafana
 
 - **Production**
     - [ ] Middleware for tracing / logging
@@ -58,7 +43,9 @@ Let's assume,
     - [ ] URL validation + normalization
     - [ ] CORS setup
 
-- **Think of using Monitoring tools like Prometheus & Grafana**
+- **Prometheus & Grafana**
+    - [x] Prometheus
+    - [ ] Grafana
 
 ---
 
