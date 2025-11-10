@@ -1,48 +1,105 @@
-# Comments are provided throughout this file to help you get started.
-# If you need more help, visit the Docker Compose reference guide at
-# https://docs.docker.com/go/compose-spec-reference/
-# Here the instructions define your application as a service called "server".
-# This service is built from the Dockerfile in the current directory.
-# You can add other services your application may depend on here, such as a
-# database or a cache. For examples, see the Awesome Compose repository:
-# https://github.com/docker/awesome-compose
 services:
-  server:
+  app:
     build:
       context: .
-      target: final
+      dockerfile: Dockerfile
+    container_name: shorty_app
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # Ensure these exist in your .env or override here
+      - DATABASE_URL=postgres://postgres:postgres@db:5432/shorty
+      - REDIS_URL=redis://redis:6379
+      - BASE_URL=http://localhost:8080
+      - RUST_LOG=info
     ports:
-      - 8080:8080
+      - "8080:8080"      # app external port
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - shorty_net
 
-# The commented out section below is an example of how to define a PostgreSQL
-# database that your application can use. `depends_on` tells Docker Compose to
-# start the database before your application. The `db-data` volume persists the
-# database data between container restarts. The `db-password` secret is used
-# to set the database password. You must create `db/password.txt` and add
-# a password of your choosing to it before running `docker compose up`.
-#     depends_on:
-#       db:
-#         condition: service_healthy
-#   db:
-#     image: postgres
-#     restart: always
-#     user: postgres
-#     secrets:
-#       - db-password
-#     volumes:
-#       - db-data:/var/lib/postgresql/data
-#     environment:
-#       - POSTGRES_DB=example
-#       - POSTGRES_PASSWORD_FILE=/run/secrets/db-password
-#     expose:
-#       - 5432
-#     healthcheck:
-#       test: [ "CMD", "pg_isready" ]
-#       interval: 10s
-#       timeout: 5s
-#       retries: 5
-# volumes:
-#   db-data:
-# secrets:
-#   db-password:
-#     file: db/password.txt
+  db:
+    image: postgres:15
+    container_name: shorty_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: shorty
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - shorty_net
+
+  redis:
+    image: redis:7-alpine
+    container_name: shorty_redis
+    restart: unless-stopped
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - shorty_net
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: shorty_prometheus
+    restart: unless-stopped
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+    ports:
+      - "9090:9090"
+    networks:
+      - shorty_net
+    depends_on:
+      - app
+
+  # grafana:
+  #   image: grafana/grafana:latest
+  #   container_name: shorty_grafana
+  #   restart: unless-stopped
+  #   environment:
+  #     - GF_SECURITY_ADMIN_USER=admin
+  #     - GF_SECURITY_ADMIN_PASSWORD=admin
+  #     - GF_SERVER_ROOT_URL=%(protocol)s://%(domain)s:%(http_port)s
+  #     # optional: allow anonymous view
+  #     - GF_AUTH_ANONYMOUS_ENABLED=true
+  #     - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+  #   volumes:
+  #     - grafana_data:/var/lib/grafana
+  #     - ./grafana/provisioning:/etc/grafana/provisioning:ro  # optional datasource auto-provision
+  #   ports:
+  #     - "3000:3000"
+  #   networks:
+  #     - shorty_net
+  #   depends_on:
+  #     - prometheus
+  #
+volumes:
+  pgdata:
+  redisdata:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  shorty_net:
+    driver: bridge
+

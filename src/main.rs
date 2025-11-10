@@ -1,4 +1,5 @@
 mod handlers;
+mod metrics;
 mod models;
 mod state;
 
@@ -15,9 +16,8 @@ async fn main() -> std::io::Result<()> {
     env_logger::init_from_env(Env::default().default_filter_or("info"));
     dotenv().ok();
 
-    let db_uri = std::env::var("DATABASE_URL").expect("Invalid database uri");
-
-    // db pool creation
+    // DB pool creation -> sqlx
+    let db_uri: String = std::env::var("DATABASE_URL").expect("Invalid database uri");
     let pool: Pool<Postgres> = match PgPoolOptions::new()
         .max_connections(3)
         .connect(&db_uri)
@@ -34,7 +34,8 @@ async fn main() -> std::io::Result<()> {
     };
 
     // Redis pool creation
-    let cfg = Config::from_url("redis://127.0.0.1/");
+    let redis_url: String = std::env::var("REDIS_URL").expect("Invalid redis url");
+    let cfg = Config::from_url(redis_url);
     let redis_pool = match cfg.create_pool(Some(Runtime::Tokio1)) {
         Ok(pool) => match pool.get().await {
             Ok(_) => {
@@ -52,6 +53,7 @@ async fn main() -> std::io::Result<()> {
         }
     };
 
+    // Spawn the server
     HttpServer::new(move || {
         App::new()
             .wrap(Logger::default())
@@ -62,6 +64,8 @@ async fn main() -> std::io::Result<()> {
             }))
             .service(redirection)
             .service(data_shorten)
+            .service(prom)
+            .service(metrics)
     })
     .bind(("0.0.0.0", 8080))?
     .workers(2)

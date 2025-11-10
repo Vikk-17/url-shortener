@@ -21,9 +21,8 @@ Let's assume,
 ### TODO
 
 - **Add Redis caching**
-    - [ ] Cache slug -> longurl
-    - [ ] Cache expiry (e.g., 24 hours)
-    - [ ] Write-through logic
+    - [x] Cache slug -> longurl
+    - [x] Cache expiry (e.g., 24 hours)
 
 - **Add stats endpoint**
     - [ ] GET /api/v1/stats/{slug}
@@ -70,3 +69,8 @@ Let's assume,
 - [Redis 101 / GitHub](https://github.com/abhirockzz/rust-redis-101)
 - [actix_session / Redis Client](https://github.com/actix/examples/blob/main/auth/redis-session/src/main.rs)
 - [Deadpool Redis](https://docs.rs/deadpool-redis/latest/deadpool_redis/)
+- [Lazy Static](https://docs.rs/lazy_static/latest/lazy_static/)
+- [Prometheus Rust](https://docs.rs/prometheus/latest/prometheus/)
+- [Prometheus / examples](https://github.com/tikv/rust-prometheus/tree/master/examples)
+- [Actix web - Prometheus](https://docs.rs/actix-web-prometheus/latest/actix_web_prometheus/)
+- [Prometheus Yaml Config](https://prometheus.io/docs/prometheus/latest/configuration/configuration/)
