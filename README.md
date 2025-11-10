@@ -16,7 +16,6 @@ Let's assume,
 
 ![DB Support](./assets/shortner_fc.excalidraw.png)
 
-
 ---
 
 ### TODO
@@ -45,10 +44,10 @@ Let's assume,
 - **Add S3 log export endpoint in case of AWS integration**
 
 - [x] CI/CD Pipelining
-    - [ ] Need to add docker secrets in the github
+    - [x] Need to add docker secrets in the github
 
 - **Dockerfile & docker-compose**
-    - [x] Dockerfile - tested 
+    - [x] Dockerfile - tested
     - [ ] API container
     - [ ] Postgres
     - [ ] Redis
@@ -61,3 +60,13 @@ Let's assume,
     - [ ] CORS setup
 
 - **Think of using Monitoring tools like Prometheus & Grafana**
+
+---
+
+### References
+
+- [Redis Cheatsheet](https://redis.io/learn/howtos/quick-start/cheat-sheet)
+- [SCAN - Redis](https://redis.io/docs/latest/commands/scan/)
+- [Redis 101 / GitHub](https://github.com/abhirockzz/rust-redis-101)
+- [actix_session / Redis Client](https://github.com/actix/examples/blob/main/auth/redis-session/src/main.rs)
+- [Deadpool Redis](https://docs.rs/deadpool-redis/latest/deadpool_redis/)

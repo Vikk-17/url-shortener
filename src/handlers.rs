@@ -1,6 +1,7 @@
 use crate::AppState;
 use crate::models::*;
 use actix_web::{Error, HttpResponse, Result, get, http::header::LOCATION, post, web};
+use redis::AsyncCommands;
 use serde_json::json;
 use sqlx::Row; // <- only required to call get function
 
@@ -13,7 +14,31 @@ pub async fn redirection(
 ) -> Result<HttpResponse, Error> {
     let slug = path.into_inner();
 
-    // check if the slug is existing
+    // 1. get the connection object from the pool
+    let mut redis_conn = state
+        .redis
+        .get()
+        .await
+        .map_err(actix_web::error::ErrorInternalServerError)?;
+
+    let cache_key = format! {"slug: {}", slug};
+
+    // 2. Check redis cache
+    let cached: Option<String> = redis_conn
+        .get(&cache_key)
+        .await
+        .map_err(actix_web::error::ErrorInternalServerError)?;
+
+    if let Some(longurl) = cached {
+        println!("Cache hit for slug: {}", slug);
+        return Ok(HttpResponse::Found()
+            .insert_header((LOCATION, longurl))
+            .finish());
+    }
+
+    println!("Cache missed for the slug: {}", slug);
+
+    // 3. If not query it into db
     let existing = sqlx::query(r#"SELECT longurl FROM urls WHERE slug = $1"#)
         .bind(&slug)
         .fetch_optional(&state.db)
@@ -26,6 +51,15 @@ pub async fn redirection(
 
     let longurl = row.get::<String, _>("longurl");
 
+    // 4. Cache the slug with 1 hour of ttl
+    let _: () = redis_conn
+        .set_ex(&cache_key, &longurl, 3600)
+        .await
+        .map_err(actix_web::error::ErrorInternalServerError)?;
+
+    println!("Cached slug: {} -> {}", slug, longurl);
+
+    // 5. Redirect it to longurl
     Ok(HttpResponse::Found()
         .insert_header((LOCATION, longurl))
         .finish())
@@ -66,6 +100,19 @@ pub async fn data_shorten(
         .fetch_optional(&state.db)
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
+
+        let mut redis_conn = state
+            .redis
+            .get()
+            .await
+            .map_err(actix_web::error::ErrorInternalServerError)?;
+
+        let cache_key = format! {"slug: {}", slug};
+
+        let _: () = redis_conn
+            .set_ex(&cache_key, &longurl, 3600)
+            .await
+            .map_err(actix_web::error::ErrorInternalServerError)?;
 
         let output = DbOutput { id, slug, longurl };
 
