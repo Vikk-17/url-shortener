@@ -1,6 +1,9 @@
 use crate::AppState;
 use crate::models::*;
+use crate::metrics::*;
+use actix_web::Responder;
 use actix_web::{Error, HttpResponse, Result, get, http::header::LOCATION, post, web};
+use prometheus::{Registry, TextEncoder, Encoder};
 use redis::AsyncCommands;
 use serde_json::json;
 use sqlx::Row; // <- only required to call get function
@@ -34,6 +37,10 @@ pub async fn redirection(
     println!("Redis lookup took: {:?}", start.elapsed());
 
     if let Some(longurl) = cached {
+        HTTP_REQUEST_TOTAL
+            .with_label_values(&["GET", "/api/v1/{slud}", "302"])
+            .inc();
+
         println!("Cache hit for slug: {}", slug);
         return Ok(HttpResponse::Found()
             .insert_header((LOCATION, longurl))
@@ -52,6 +59,10 @@ pub async fn redirection(
     println!("Db lookup took: {:?}", start.elapsed());
 
     let Some(row) = existing else {
+        HTTP_REQUEST_TOTAL
+            .with_label_values(&["GET", "/api/v1/{slud}", "404"])
+            .inc();
+
         return Ok(HttpResponse::NotFound().finish());
     };
 
@@ -59,11 +70,15 @@ pub async fn redirection(
 
     // 4. Cache the slug with 1 hour of ttl
     let _: () = redis_conn
-        .set_ex(&cache_key, &longurl, 3600)
+        .set_ex(&cache_key, &longurl, 86400)
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
 
     println!("Cached slug: {} -> {}", slug, longurl);
+
+    HTTP_REQUEST_TOTAL
+        .with_label_values(&["GET", "/api/v1/{slug}", "302"])
+        .inc();
 
     // 5. Redirect it to longurl
     Ok(HttpResponse::Found()
@@ -116,11 +131,15 @@ pub async fn data_shorten(
         let cache_key = format! {"slug:{}", slug};
 
         let _: () = redis_conn
-            .set_ex(&cache_key, &longurl, 3600)
+            .set_ex(&cache_key, &longurl, 86400)
             .await
             .map_err(actix_web::error::ErrorInternalServerError)?;
 
         let output = DbOutput { id, slug, longurl };
+
+        HTTP_REQUEST_TOTAL
+            .with_label_values(&["POST", "/api/v1/data/shorten/", "200"])
+            .inc();
 
         // use of return to avoid the error of "Missing else block"
         return Ok(HttpResponse::Ok().json(json!({
@@ -141,8 +160,39 @@ pub async fn data_shorten(
 
     let out = DbOutput { id, slug, longurl };
 
+    HTTP_REQUEST_TOTAL
+        .with_label_values(&["POST", "/api/v1/data/shorten/", "200"])
+        .inc();
+
     Ok(HttpResponse::Ok().json(json!({
         "message": "Already existed",
         "output": out
     })))
+}
+
+#[get("/prom")]
+pub async fn prom() -> impl Responder {
+
+    HTTP_REQUEST_TOTAL
+        .with_label_values(&["GET", "/prom", "200"])
+        .inc();
+
+    HttpResponse::Ok().json(json!({
+        "Message": "Prometheus testing",
+    }))
+}
+
+#[get("/metrics")]
+pub async fn metrics() -> Result<HttpResponse, Error> {
+    let encoder = TextEncoder::new();
+    let mut buffer = vec![];
+    let metric_families = prometheus::gather();
+
+    encoder.encode(&metric_families, &mut buffer)
+        .map_err(actix_web::error::ErrorInternalServerError)?;
+
+    Ok(HttpResponse::Ok()
+        .content_type("text/plain; version=0.0.4")
+        .body(buffer)
+    )
 }
