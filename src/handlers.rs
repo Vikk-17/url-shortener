@@ -1,9 +1,9 @@
 use crate::AppState;
 use crate::models::*;
 use actix_web::{Error, HttpResponse, Result, get, http::header::LOCATION, post, web};
+use redis::AsyncCommands;
 use serde_json::json;
 use sqlx::Row; // <- only required to call get function
-use redis::AsyncCommands;
 
 /// GET /api/v1/shorturl
 /// Return longurl for HTTP Redirection
@@ -21,8 +21,8 @@ pub async fn redirection(
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
 
-    let cache_key = format!{"slug: {}", slug};
- 
+    let cache_key = format! {"slug: {}", slug};
+
     // 2. Check redis cache
     let cached: Option<String> = redis_conn
         .get(&cache_key)
@@ -38,7 +38,7 @@ pub async fn redirection(
 
     println!("Cache missed for the slug: {}", slug);
 
-    // 3. If not query it into db 
+    // 3. If not query it into db
     let existing = sqlx::query(r#"SELECT longurl FROM urls WHERE slug = $1"#)
         .bind(&slug)
         .fetch_optional(&state.db)
@@ -107,7 +107,7 @@ pub async fn data_shorten(
             .await
             .map_err(actix_web::error::ErrorInternalServerError)?;
 
-        let cache_key = format!{"slug: {}", slug};
+        let cache_key = format! {"slug: {}", slug};
 
         let _: () = redis_conn
             .set_ex(&cache_key, &longurl, 3600)
