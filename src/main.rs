@@ -8,6 +8,7 @@ use dotenvy::dotenv;
 use env_logger::Env;
 use handlers::*;
 use sqlx::{Pool, Postgres, postgres::PgPoolOptions};
+use deadpool_redis::{Config, Runtime};
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -16,6 +17,7 @@ async fn main() -> std::io::Result<()> {
 
     let db_uri = std::env::var("DATABASE_URL").expect("Invalid database uri");
 
+    // db pool creation
     let pool: Pool<Postgres> = match PgPoolOptions::new()
         .max_connections(3)
         .connect(&db_uri)
@@ -31,11 +33,32 @@ async fn main() -> std::io::Result<()> {
         }
     };
 
+    // Redis pool creation
+    let cfg = Config::from_url("redis://127.0.0.1/");
+    let redis_pool = match cfg.create_pool(Some(Runtime::Tokio1)) {
+        Ok(pool) => {
+            match pool.get().await {
+                Ok(_) => {
+                    println!("Redis connection successfull");
+                    pool
+                }
+                Err(e) => {
+                    eprintln!("Failed to connect to redis: {e}");
+                    std::process::exit(1);
+                }
+            }
+        },
+        Err(e) => {
+            eprintln!("Failed to connect to the redis {e}");
+            std::process::exit(1);
+        }
+    };
+
     HttpServer::new(move || {
         App::new()
             .wrap(Logger::default())
             .wrap(Logger::new("%a %{User-Agent}i"))
-            .app_data(web::Data::new(AppState { db: pool.clone() }))
+            .app_data(web::Data::new(AppState { db: pool.clone(), redis: redis_pool.clone() }))
             .service(redirection)
             .service(data_shorten)
     })
