@@ -4,6 +4,7 @@ use actix_web::{Error, HttpResponse, Result, get, http::header::LOCATION, post, 
 use redis::AsyncCommands;
 use serde_json::json;
 use sqlx::Row; // <- only required to call get function
+use std::time::Instant;
 
 /// GET /api/v1/shorturl
 /// Return longurl for HTTP Redirection
@@ -21,13 +22,16 @@ pub async fn redirection(
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
 
-    let cache_key = format! {"slug: {}", slug};
+    let cache_key = format! {"slug:{}", slug};
 
     // 2. Check redis cache
+    let start = Instant::now();
     let cached: Option<String> = redis_conn
         .get(&cache_key)
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
+
+    println!("Redis lookup took: {:?}", start.elapsed());
 
     if let Some(longurl) = cached {
         println!("Cache hit for slug: {}", slug);
@@ -39,11 +43,13 @@ pub async fn redirection(
     println!("Cache missed for the slug: {}", slug);
 
     // 3. If not query it into db
+    let start = Instant::now();
     let existing = sqlx::query(r#"SELECT longurl FROM urls WHERE slug = $1"#)
         .bind(&slug)
         .fetch_optional(&state.db)
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
+    println!("Db lookup took: {:?}", start.elapsed());
 
     let Some(row) = existing else {
         return Ok(HttpResponse::NotFound().finish());
@@ -107,7 +113,7 @@ pub async fn data_shorten(
             .await
             .map_err(actix_web::error::ErrorInternalServerError)?;
 
-        let cache_key = format! {"slug: {}", slug};
+        let cache_key = format! {"slug:{}", slug};
 
         let _: () = redis_conn
             .set_ex(&cache_key, &longurl, 3600)
