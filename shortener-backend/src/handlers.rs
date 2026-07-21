@@ -164,14 +164,10 @@ pub async fn data_shorten(
             actix_web::error::ErrorInternalServerError(e)
         })?;
 
-        let mut redis_conn = state
-            .redis
-            .get()
-            .await
-            .map_err(|e| {
-                eprintln!("[Redis Connection Error]: {:?}", e);
-                actix_web::error::ErrorInternalServerError(e)
-            })?;
+        let mut redis_conn = state.redis.get().await.map_err(|e| {
+            eprintln!("[Redis Connection Error]: {:?}", e);
+            actix_web::error::ErrorInternalServerError(e)
+        })?;
 
         let cache_key = format! {"slug:{}", slug};
 
@@ -261,4 +257,3 @@ pub async fn metrics() -> Result<HttpResponse, Error> {
         .content_type("text/plain; version=0.0.4")
         .body(buffer))
 }
-

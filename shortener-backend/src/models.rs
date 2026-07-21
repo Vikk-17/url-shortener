@@ -4,7 +4,7 @@ use utoipa::ToSchema;
 
 #[derive(Serialize, Deserialize, ToSchema)]
 pub struct UserLongUrl {
-    #[schema(example="https://doc.rust-lang.org/book/")]
+    #[schema(example = "https://doc.rust-lang.org/book/")]
     pub longurl: String,
 }
 
@@ -19,20 +19,20 @@ impl UserLongUrl {
 
 #[derive(Serialize, Deserialize, Debug, ToSchema)]
 pub struct DbOutput {
-    #[schema(example=1)]
+    #[schema(example = 1)]
     pub id: i64,
 
-    #[schema(example="https://doc.rust-lang.org/book/")]
+    #[schema(example = "https://doc.rust-lang.org/book/")]
     pub longurl: String,
 
-    #[schema(example="abd2A")]
+    #[schema(example = "abd2A")]
     pub slug: String,
 }
 
 #[derive(Serialize, Debug, ToSchema)]
 pub struct ShortenResponse {
     /// Response Message
-    #[schema(example="Data Inserted")]
+    #[schema(example = "Data Inserted")]
     pub message: String,
 
     /// URL Data
@@ -41,7 +41,7 @@ pub struct ShortenResponse {
 
 #[derive(Debug, Serialize, ToSchema)]
 pub struct ErrorResponse {
-    #[schema(example="URL not Found")]
+    #[schema(example = "URL not Found")]
     pub error: String,
 }
 
@@ -80,4 +80,3 @@ mod tests {
         assert!(!empty.is_valid_url());
     }
 }
-

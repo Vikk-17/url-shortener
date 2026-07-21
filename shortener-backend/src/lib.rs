@@ -52,11 +52,11 @@ use utoipa_swagger_ui::SwaggerUi;
 )]
 struct ApiDoc;
 
-pub async fn run() -> std::io::Result<()> { 
+pub async fn run() -> std::io::Result<()> {
     env_logger::init_from_env(Env::default().default_filter_or("info"));
     dotenv().ok();
 
-    let  openapi = ApiDoc::openapi();
+    let openapi = ApiDoc::openapi();
 
     // DB pool creation -> sqlx
     let db_uri: String = std::env::var("DATABASE_URL").expect("Invalid database uri");
@@ -114,8 +114,7 @@ pub async fn run() -> std::io::Result<()> {
             .service(prom)
             .service(metrics)
             .service(
-                SwaggerUi::new("/swagger-ui/{_:.*}")
-                    .url("/api-docs/openapi.json", openapi.clone())
+                SwaggerUi::new("/swagger-ui/{_:.*}").url("/api-docs/openapi.json", openapi.clone()),
             )
     })
     .bind(("0.0.0.0", 8080))?
