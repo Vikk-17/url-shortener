@@ -1,45 +1,32 @@
 services:
-  app:
+  backend:
     build:
-      context: .
+      context: ./shortener-backend
       dockerfile: Dockerfile
-    container_name: shorty_app
+    container_name: shorty_backend
     restart: unless-stopped
     env_file:
       - .env
-    environment:
-      # Ensure these exist in your .env or override here
-      - DATABASE_URL=postgres://postgres:postgres@db:5432/shorty
-      - REDIS_URL=redis://redis:6379
-      - BASE_URL=http://localhost:8080
-      - RUST_LOG=info
     ports:
-      - "8080:8080"      # app external port
+      - "8080:8080"
     depends_on:
-      db:
-        condition: service_healthy
       redis:
         condition: service_healthy
     networks:
       - shorty_net
 
-  db:
-    image: postgres:15
-    container_name: shorty_db
+  frontend:
+    build:
+      context: ./shortener-frontend
+      dockerfile: Dockerfile
+    container_name: shorty_frontend
     restart: unless-stopped
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: shorty
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+    ports:
+      - "3000:80"
     networks:
       - shorty_net
+    depends_on:
+      - backend
 
   redis:
     image: redis:7-alpine
@@ -60,7 +47,7 @@ services:
     container_name: shorty_prometheus
     restart: unless-stopped
     volumes:
-      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./shortener-backend/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
@@ -70,36 +57,12 @@ services:
     networks:
       - shorty_net
     depends_on:
-      - app
+      - backend
 
-  # grafana:
-  #   image: grafana/grafana:latest
-  #   container_name: shorty_grafana
-  #   restart: unless-stopped
-  #   environment:
-  #     - GF_SECURITY_ADMIN_USER=admin
-  #     - GF_SECURITY_ADMIN_PASSWORD=admin
-  #     - GF_SERVER_ROOT_URL=%(protocol)s://%(domain)s:%(http_port)s
-  #     # optional: allow anonymous view
-  #     - GF_AUTH_ANONYMOUS_ENABLED=true
-  #     - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
-  #   volumes:
-  #     - grafana_data:/var/lib/grafana
-  #     - ./grafana/provisioning:/etc/grafana/provisioning:ro  # optional datasource auto-provision
-  #   ports:
-  #     - "3000:3000"
-  #   networks:
-  #     - shorty_net
-  #   depends_on:
-  #     - prometheus
-  #
 volumes:
-  pgdata:
   redisdata:
   prometheus_data:
-  grafana_data:
 
 networks:
   shorty_net:
     driver: bridge
-

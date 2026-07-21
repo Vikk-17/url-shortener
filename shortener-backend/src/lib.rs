@@ -4,7 +4,9 @@ mod models;
 mod state;
 
 use crate::state::*;
+use actix_cors::Cors;
 use actix_web::{App, HttpServer, middleware::Logger, web};
+
 use deadpool_redis::{Config, Runtime};
 use dotenvy::dotenv;
 use env_logger::Env;
@@ -64,7 +66,12 @@ pub async fn run() -> std::io::Result<()> {
         .await
     {
         Ok(pool) => {
-            println!("Database connection is successfull");
+            println!("Database connection is successful");
+            if let Err(err) = sqlx::migrate!("./migrations").run(&pool).await {
+                eprintln!("Failed to run database migrations: {:?}", err);
+                std::process::exit(1);
+            }
+            println!("Database migrations executed successfully");
             pool
         }
         Err(err) => {
@@ -79,7 +86,7 @@ pub async fn run() -> std::io::Result<()> {
     let redis_pool = match cfg.create_pool(Some(Runtime::Tokio1)) {
         Ok(pool) => match pool.get().await {
             Ok(_) => {
-                println!("Redis connection successfull");
+                println!("Redis connection successful");
                 pool
             }
             Err(e) => {
@@ -96,8 +103,8 @@ pub async fn run() -> std::io::Result<()> {
     // Spawn the server
     HttpServer::new(move || {
         App::new()
+            .wrap(Cors::permissive())
             .wrap(Logger::default())
-            .wrap(Logger::new("%a %{User-Agent}i"))
             .app_data(web::Data::new(AppState {
                 db: pool.clone(),
                 redis: redis_pool.clone(),

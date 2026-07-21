@@ -8,7 +8,6 @@ use redis::AsyncCommands;
 use serde_json::json;
 use sqlx::Row; // <- only required to call get function
 use std::time::Instant;
-use utoipa;
 
 /// GET /api/v1/shorturl
 /// Return longurl for HTTP Redirection
@@ -53,7 +52,7 @@ pub async fn redirection(
 
     if let Some(longurl) = cached {
         HTTP_REQUEST_TOTAL
-            .with_label_values(&["GET", "/api/v1/{slud}", "302"])
+            .with_label_values(&["GET", "/api/v1/{slug}", "302"])
             .inc();
 
         println!("Cache hit for slug: {}", slug);
@@ -75,7 +74,7 @@ pub async fn redirection(
 
     let Some(row) = existing else {
         HTTP_REQUEST_TOTAL
-            .with_label_values(&["GET", "/api/v1/{slud}", "404"])
+            .with_label_values(&["GET", "/api/v1/{slug}", "404"])
             .inc();
 
         return Ok(HttpResponse::NotFound().finish());
@@ -83,7 +82,7 @@ pub async fn redirection(
 
     let longurl = row.get::<String, _>("longurl");
 
-    // 4. Cache the slug with 1 hour of ttl
+    // 4. Cache the slug with 24 hours of ttl
     let _: () = redis_conn
         .set_ex(&cache_key, &longurl, 86400)
         .await
@@ -106,9 +105,10 @@ pub async fn redirection(
 #[utoipa::path(
     post,
     path = "/api/v1/data/shorten",
-    request_body(content = UserLongUrl, description = "Long URL to shorten", content_type = "aplication/json"),
+    request_body(content = UserLongUrl, description = "Long URL to shorten", content_type = "application/json"),
     responses(
         (status = 200, description = "URL shortened successfully", body = ShortenResponse),
+        (status = 400, description = "Invalid URL provided", body = ErrorResponse),
         (status = 500, description = "Internal server error", body = ErrorResponse),
     ),
     tag = "urls"
@@ -118,7 +118,18 @@ pub async fn data_shorten(
     state: web::Data<AppState>,
     user_input: web::Json<UserLongUrl>,
 ) -> Result<HttpResponse, Error> {
-    let longurl = user_input.into_inner().longurl;
+    let user_url = user_input.into_inner();
+    if !user_url.is_valid_url() {
+        HTTP_REQUEST_TOTAL
+            .with_label_values(&["POST", "/api/v1/data/shorten", "400"])
+            .inc();
+
+        return Ok(HttpResponse::BadRequest().json(ErrorResponse {
+            error: "Invalid URL. Must be a valid http or https URL.".to_string(),
+        }));
+    }
+
+    let longurl = user_url.longurl;
     let inserted_row = sqlx::query(
         r#"
         INSERT INTO urls (longurl)
@@ -130,10 +141,13 @@ pub async fn data_shorten(
     .bind(&longurl)
     .fetch_optional(&state.db)
     .await
-    .map_err(actix_web::error::ErrorInternalServerError)?;
+    .map_err(|e| {
+        eprintln!("[DB Error on INSERT]: {:?}", e);
+        actix_web::error::ErrorInternalServerError(e)
+    })?;
 
     if let Some(row) = inserted_row {
-        let id = row.get("id");
+        let id: i64 = row.get("id");
         let slug = base62::encode(id as u128);
 
         let _ = sqlx::query(
@@ -145,25 +159,34 @@ pub async fn data_shorten(
         .bind(id)
         .fetch_optional(&state.db)
         .await
-        .map_err(actix_web::error::ErrorInternalServerError)?;
+        .map_err(|e| {
+            eprintln!("[DB Error on UPDATE slug]: {:?}", e);
+            actix_web::error::ErrorInternalServerError(e)
+        })?;
 
         let mut redis_conn = state
             .redis
             .get()
             .await
-            .map_err(actix_web::error::ErrorInternalServerError)?;
+            .map_err(|e| {
+                eprintln!("[Redis Connection Error]: {:?}", e);
+                actix_web::error::ErrorInternalServerError(e)
+            })?;
 
         let cache_key = format! {"slug:{}", slug};
 
         let _: () = redis_conn
             .set_ex(&cache_key, &longurl, 86400)
             .await
-            .map_err(actix_web::error::ErrorInternalServerError)?;
+            .map_err(|e| {
+                eprintln!("[Redis Set Error]: {:?}", e);
+                actix_web::error::ErrorInternalServerError(e)
+            })?;
 
         let output = DbOutput { id, slug, longurl };
 
         HTTP_REQUEST_TOTAL
-            .with_label_values(&["POST", "/api/v1/data/shorten/", "200"])
+            .with_label_values(&["POST", "/api/v1/data/shorten", "200"])
             .inc();
 
         // use of return to avoid the error of "Missing else block"
@@ -173,20 +196,34 @@ pub async fn data_shorten(
         })));
     };
 
-    // Existing longurl — just fetch id + slug
+    // Existing longurl — fetch id + optional slug (handling null slug race safely)
     let existing = sqlx::query(r#"SELECT id, slug FROM urls WHERE longurl = $1"#)
         .bind(&longurl)
         .fetch_one(&state.db)
         .await
-        .map_err(actix_web::error::ErrorInternalServerError)?;
+        .map_err(|e| {
+            eprintln!("[DB Error on SELECT existing]: {:?}", e);
+            actix_web::error::ErrorInternalServerError(e)
+        })?;
 
     let id: i64 = existing.get("id");
-    let slug: String = existing.get("slug");
+    let slug: String = match existing.get::<Option<String>, _>("slug") {
+        Some(s) if !s.is_empty() => s,
+        _ => {
+            let new_slug = base62::encode(id as u128);
+            let _ = sqlx::query(r#"UPDATE urls SET slug = $1 WHERE id = $2 AND slug IS NULL"#)
+                .bind(&new_slug)
+                .bind(id)
+                .execute(&state.db)
+                .await;
+            new_slug
+        }
+    };
 
     let out = DbOutput { id, slug, longurl };
 
     HTTP_REQUEST_TOTAL
-        .with_label_values(&["POST", "/api/v1/data/shorten/", "200"])
+        .with_label_values(&["POST", "/api/v1/data/shorten", "200"])
         .inc();
 
     Ok(HttpResponse::Ok().json(json!({
@@ -208,6 +245,10 @@ pub async fn prom() -> impl Responder {
 
 #[get("/metrics")]
 pub async fn metrics() -> Result<HttpResponse, Error> {
+    HTTP_REQUEST_TOTAL
+        .with_label_values(&["GET", "/metrics", "200"])
+        .inc();
+
     let encoder = TextEncoder::new();
     let mut buffer = vec![];
     let metric_families = prometheus::gather();
@@ -220,3 +261,4 @@ pub async fn metrics() -> Result<HttpResponse, Error> {
         .content_type("text/plain; version=0.0.4")
         .body(buffer))
 }
+
