@@ -122,3 +122,8 @@ pub async fn run() -> std::io::Result<()> {
     .run()
     .await
 }
+
+#[test]
+fn deliberate_failure() {
+    assert_eq!(2 + 2, 5);
+}
